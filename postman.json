@@ -1,0 +1,543 @@
+{
+  "info": {
+    "_postman_id": "saas-express-boilerplate-v1",
+    "name": "SaaS Express Boilerplate API",
+    "description": "Complete API collection for the Enterprise SaaS Express.js + MongoDB Boilerplate.\n\n## Setup\n1. Set `baseUrl` variable to your server (default: `http://localhost:3000`)\n2. Register a user → Login → the `accessToken` variable is auto-set\n3. All protected routes automatically use the Bearer token\n\n## Variables\n- `baseUrl` – API base URL\n- `accessToken` – JWT access token (auto-set on login)\n- `refreshToken` – JWT refresh token (auto-set on login)\n- `userId` – Current user ID (auto-set on login)\n- `orgId` – Organization ID (auto-set on login)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api/v1", "type": "string" },
+    { "key": "accessToken", "value": "", "type": "string" },
+    { "key": "refreshToken", "value": "", "type": "string" },
+    { "key": "userId", "value": "", "type": "string" },
+    { "key": "orgId", "value": "", "type": "string" },
+    { "key": "resetToken", "value": "", "type": "string" },
+    { "key": "verifyToken", "value": "", "type": "string" },
+    { "key": "twoFactorChallengeToken", "value": "", "type": "string" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "🔐 Authentication",
+      "description": "All authentication endpoints — register, login, token management, password reset, email verification, and 2FA.",
+      "item": [
+        {
+          "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const json = pm.response.json();",
+                  "  if (json.data && json.data.user) {",
+                  "    pm.collectionVariables.set('userId', json.data.user._id || json.data.user.id);",
+                  "    pm.collectionVariables.set('orgId', json.data.user.organizationId || '');",
+                  "  }",
+                  "  pm.test('Registration successful', () => pm.expect(pm.response.code).to.eql(201));",
+                  "  pm.test('Response has user data', () => pm.expect(json.data).to.have.property('user'));",
+                  "  pm.test('Password not exposed', () => pm.expect(json.data.user).to.not.have.property('password'));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"SecurePass123\",\n  \"organizationName\": \"Acme Corp\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] },
+            "description": "Register a new user. Optionally provide `organizationName` to create an organization simultaneously.\n\n**Validation rules:**\n- `firstName`, `lastName`: 1–50 chars\n- `email`: valid email\n- `password`: min 8 chars, must contain uppercase, lowercase, and a digit\n- `organizationName`: optional, 2–100 chars"
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  if (json.data && json.data.accessToken) {",
+                  "    pm.collectionVariables.set('accessToken', json.data.accessToken);",
+                  "    pm.collectionVariables.set('userId', json.data.user._id || json.data.user.id);",
+                  "    pm.collectionVariables.set('orgId', json.data.user.organizationId || '');",
+                  "    console.log('✅ Access token saved');",
+                  "  }",
+                  "  if (json.data && json.data.requiresTwoFactor) {",
+                  "    pm.collectionVariables.set('twoFactorChallengeToken', json.data.twoFactorToken);",
+                  "    console.log('⚠️ 2FA required — use the Verify 2FA request');",
+                  "  }",
+                  "  pm.test('Login successful', () => pm.expect(pm.response.code).to.eql(200));",
+                  "  pm.test('Access token present', () => pm.expect(json.data).to.have.property('accessToken'));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"SecurePass123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "description": "Login with email and password. Returns an `accessToken` (15 min TTL) and sets an `httpOnly` `refreshToken` cookie (30 days).\n\nIf 2FA is enabled on the account, returns `requiresTwoFactor: true` and a `twoFactorToken` challenge — use the **Verify 2FA** request to complete login."
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  if (json.data && json.data.accessToken) {",
+                  "    pm.collectionVariables.set('accessToken', json.data.accessToken);",
+                  "    console.log('✅ Access token refreshed');",
+                  "  }",
+                  "  pm.test('Token refreshed', () => pm.expect(pm.response.code).to.eql(200));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/refresh", "host": ["{{baseUrl}}"], "path": ["auth", "refresh"] },
+            "description": "Exchange a valid refresh token for a new access token. The refresh token is typically sent via httpOnly cookie automatically, but can also be passed in the request body.\n\nRefresh tokens are rotated on each use (old one is invalidated, new one issued)."
+          }
+        },
+        {
+          "name": "Get Current User (Me)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/auth/me", "host": ["{{baseUrl}}"], "path": ["auth", "me"] },
+            "description": "Get the currently authenticated user's profile. Requires a valid Bearer token.\n\nReturns the full user object excluding sensitive fields (password, tokens, 2FA secret)."
+          }
+        },
+        {
+          "name": "Logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  pm.collectionVariables.set('accessToken', '');",
+                  "  pm.collectionVariables.set('refreshToken', '');",
+                  "  pm.test('Logged out successfully', () => pm.expect(pm.response.code).to.eql(200));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/logout", "host": ["{{baseUrl}}"], "path": ["auth", "logout"] },
+            "description": "Logout the current session. Blacklists the access token and invalidates the refresh token.\n\nThe refresh token cookie is also cleared."
+          }
+        },
+        {
+          "name": "Logout All Devices",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  pm.collectionVariables.set('accessToken', '');",
+                  "  pm.collectionVariables.set('refreshToken', '');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/auth/logout-all", "host": ["{{baseUrl}}"], "path": ["auth", "logout-all"] },
+            "description": "Invalidate ALL refresh tokens for the current user, effectively logging out from every device/session.\n\nThe current access token (15 min TTL) may still work until it expires naturally."
+          }
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@example.com\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/forgot-password", "host": ["{{baseUrl}}"], "path": ["auth", "forgot-password"] },
+            "description": "Request a password reset email. Always returns success to prevent email enumeration — even if the email doesn't exist in the system.\n\nThe reset link is valid for **10 minutes**.\n\n**Rate limited:** 3 requests per hour per IP."
+          }
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"NewSecurePass456\",\n  \"passwordConfirm\": \"NewSecurePass456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/reset-password/{{resetToken}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "reset-password", "{{resetToken}}"]
+            },
+            "description": "Reset password using the token received via email. The token is a one-time-use token valid for 10 minutes.\n\nSuccessful reset also invalidates ALL existing refresh tokens (logs out all devices)."
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"SecurePass123\",\n  \"newPassword\": \"NewSecurePass456\",\n  \"newPasswordConfirm\": \"NewSecurePass456\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/change-password", "host": ["{{baseUrl}}"], "path": ["auth", "change-password"] },
+            "description": "Change password for the currently authenticated user. Requires knowledge of the current password.\n\nSuccessful change invalidates ALL existing sessions (refresh tokens)."
+          }
+        },
+        {
+          "name": "Verify Email",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/auth/verify-email/{{verifyToken}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "verify-email", "{{verifyToken}}"]
+            },
+            "description": "Verify a user's email address using the token sent in the verification email.\n\nToken is valid for **24 hours**. On success, user status changes from `pending_verification` to `active`."
+          }
+        },
+        {
+          "name": "Resend Verification Email",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/auth/resend-verification", "host": ["{{baseUrl}}"], "path": ["auth", "resend-verification"] },
+            "description": "Resend the email verification link to the currently authenticated user's email address.\n\nUseful when the original verification email expired or was lost."
+          }
+        },
+        {
+          "name": "Verify 2FA (Complete Login)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  if (json.data && json.data.accessToken) {",
+                  "    pm.collectionVariables.set('accessToken', json.data.accessToken);",
+                  "    console.log('✅ 2FA verified, access token saved');",
+                  "  }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"challengeToken\": \"{{twoFactorChallengeToken}}\",\n  \"otp\": \"123456\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/verify-2fa", "host": ["{{baseUrl}}"], "path": ["auth", "verify-2fa"] },
+            "description": "Complete a login that requires 2FA. Submit the `challengeToken` from the login response along with the current 6-digit TOTP code from the authenticator app.\n\nThe challenge token expires in **5 minutes**."
+          }
+        }
+      ]
+    },
+    {
+      "name": "👤 Users",
+      "description": "User profile management — view, update, delete your own profile, manage sessions, update preferences, upload avatar. Admin endpoints for user management.",
+      "item": [
+        {
+          "name": "Get My Profile",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/users/me", "host": ["{{baseUrl}}"], "path": ["users", "me"] },
+            "description": "Get the full profile of the currently authenticated user, including populated organization details.\n\nExcludes: password, tokens, 2FA secret, refresh tokens."
+          }
+        },
+        {
+          "name": "Update My Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Smith\",\n  \"phone\": \"+1234567890\",\n  \"username\": \"johnsmith\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/users/me", "host": ["{{baseUrl}}"], "path": ["users", "me"] },
+            "description": "Update the current user's profile.\n\n**Updatable fields:** `firstName`, `lastName`, `phone`, `username`, `preferences`\n\nFields not in this list are ignored. To change password, use the Change Password endpoint."
+          }
+        },
+        {
+          "name": "Delete My Account",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/users/me", "host": ["{{baseUrl}}"], "path": ["users", "me"] },
+            "description": "Soft-delete the current user's account. Sets `deletedAt` timestamp and status to `inactive`.\n\n⚠️ This action cannot be undone via the API. The account data is retained for audit purposes."
+          }
+        },
+        {
+          "name": "Get My Active Sessions",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/users/me/sessions", "host": ["{{baseUrl}}"], "path": ["users", "me", "sessions"] },
+            "description": "List all active sessions (refresh tokens) for the current user.\n\nShows: device, IP address, user agent, created date, expiry for each session."
+          }
+        },
+        {
+          "name": "Update My Preferences",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"language\": \"en\",\n  \"timezone\": \"America/New_York\",\n  \"theme\": \"dark\",\n  \"notifications\": {\n    \"email\": true,\n    \"push\": true,\n    \"sms\": false\n  }\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/users/me/preferences", "host": ["{{baseUrl}}"], "path": ["users", "me", "preferences"] },
+            "description": "Update user preferences.\n\n**Options:**\n- `language`: language code (e.g. `en`, `fr`, `de`)\n- `timezone`: IANA timezone (e.g. `America/New_York`, `UTC`)\n- `theme`: `light`, `dark`, or `system`\n- `notifications.email`: boolean\n- `notifications.push`: boolean\n- `notifications.sms`: boolean"
+          }
+        },
+        {
+          "name": "Upload Avatar",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "avatar",
+                  "type": "file",
+                  "src": "",
+                  "description": "Image file (jpg, png, gif, webp). Max 10MB."
+                }
+              ]
+            },
+            "url": { "raw": "{{baseUrl}}/users/me/avatar", "host": ["{{baseUrl}}"], "path": ["users", "me", "avatar"] },
+            "description": "Upload a profile avatar image. Accepts: `jpg`, `jpeg`, `png`, `gif`, `webp`. Max size: 10MB.\n\nThe image is automatically processed (resized to 400×400 original, 80×80 thumbnail) and uploaded to AWS S3.\n\nReturns both `original` and `thumbnail` URLs."
+          }
+        },
+        {
+          "name": "[Admin] List All Users",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/users?page=1&limit=20&sort=-createdAt",
+              "host": ["{{baseUrl}}"],
+              "path": ["users"],
+              "query": [
+                { "key": "page", "value": "1", "description": "Page number (default: 1)" },
+                { "key": "limit", "value": "20", "description": "Items per page (default: 20, max: 100)" },
+                { "key": "sort", "value": "-createdAt", "description": "Sort field. Prefix with - for descending (e.g. -createdAt, name)" },
+                { "key": "status", "value": "active", "description": "Filter by status: active, inactive, suspended, pending_verification", "disabled": true },
+                { "key": "role", "value": "user", "description": "Filter by role: user, admin, super_admin, viewer", "disabled": true },
+                { "key": "organizationId", "value": "", "description": "Filter by organization ID", "disabled": true },
+                { "key": "search", "value": "", "description": "Search by firstName, lastName, or email", "disabled": true },
+                { "key": "fields", "value": "firstName,lastName,email,role", "description": "Comma-separated fields to return", "disabled": true }
+              ]
+            },
+            "description": "**Requires:** `admin` or `super_admin` role.\n\nList all users with pagination, filtering, sorting, and field selection.\n\n**Filters:** `status`, `role`, `organizationId`, `search`\n**Sort:** Use `-` prefix for descending (e.g. `-createdAt`)\n**Fields:** Comma-separated field names for sparse responses"
+          }
+        },
+        {
+          "name": "[Admin] Get User by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{userId}}"]
+            },
+            "description": "**Requires:** `admin` or `super_admin` role.\n\nGet a specific user by MongoDB ObjectId. Includes populated organization info."
+          }
+        },
+        {
+          "name": "[Admin] Update User",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Jane\",\n  \"lastName\": \"Doe\",\n  \"username\": \"janedoe\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{userId}}"]
+            },
+            "description": "**Requires:** `admin` or `super_admin` role.\n\nUpdate any user's profile fields."
+          }
+        },
+        {
+          "name": "[Super Admin] Delete User",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{userId}}"]
+            },
+            "description": "**Requires:** `super_admin` role.\n\nSoft-delete a user account by ID. Sets `deletedAt` timestamp and changes status to `inactive`.\n\nThe user can no longer log in but data is preserved."
+          }
+        }
+      ]
+    },
+    {
+      "name": "🏢 Organizations",
+      "description": "Organization (tenant) management — list your organizations, view organization details.",
+      "item": [
+        {
+          "name": "List My Organizations",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/organizations", "host": ["{{baseUrl}}"], "path": ["organizations"] },
+            "description": "Get all organizations the current user is a member of.\n\nReturns full organization objects including billing info, plan details, member list, and settings."
+          }
+        },
+        {
+          "name": "Get Organization by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/organizations/{{orgId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["organizations", "{{orgId}}"]
+            },
+            "description": "Get a specific organization by ID.\n\n**Access control:** User must be a member of the organization, or a `super_admin`.\n\nReturns full organization details including current plan, usage stats, billing info, and member list."
+          }
+        }
+      ]
+    },
+    {
+      "name": "💳 Billing",
+      "description": "Stripe billing — invoices, customer portal. Requires Stripe to be configured.",
+      "item": [
+        {
+          "name": "Get Invoices",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/billing/invoices", "host": ["{{baseUrl}}"], "path": ["billing", "invoices"] },
+            "description": "Get the last 10 invoices for the current user's organization.\n\n**Requires:** Stripe configured with `STRIPE_SECRET_KEY`\n\nReturns: invoice ID, number, status, amount, currency, date, PDF download URL."
+          }
+        },
+        {
+          "name": "Get Billing Portal URL",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"returnUrl\": \"http://localhost:3001/settings/billing\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/billing/portal", "host": ["{{baseUrl}}"], "path": ["billing", "portal"] },
+            "description": "Generate a Stripe Customer Portal URL for the current user's organization.\n\nThe portal lets users:\n- View and download invoices\n- Update payment methods\n- Cancel or upgrade subscriptions\n\n**Requires:** Stripe configured with an active customer ID."
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔧 Admin",
+      "description": "Super admin only endpoints — system statistics, queue monitoring.",
+      "item": [
+        {
+          "name": "Get System Stats",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/admin/stats", "host": ["{{baseUrl}}"], "path": ["admin", "stats"] },
+            "description": "**Requires:** `super_admin` role.\n\nGet system-level statistics:\n- **Queue stats:** waiting, active, completed, failed, delayed jobs per queue\n- **Database status:** connection state, host, pool size\n\nUseful for monitoring dashboards and health checks."
+          }
+        }
+      ]
+    },
+    {
+      "name": "🪝 Webhooks",
+      "description": "Inbound webhook receivers — Stripe events.",
+      "item": [
+        {
+          "name": "Stripe Webhook",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "stripe-signature", "value": "t=timestamp,v1=signature", "description": "Stripe webhook signature (set automatically by Stripe)" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"evt_test_123\",\n  \"type\": \"customer.subscription.updated\",\n  \"data\": {\n    \"object\": {\n      \"id\": \"sub_123\",\n      \"status\": \"active\",\n      \"metadata\": {\n        \"organizationId\": \"{{orgId}}\",\n        \"plan\": \"professional\"\n      },\n      \"current_period_start\": 1700000000,\n      \"current_period_end\": 1702678400,\n      \"cancel_at_period_end\": false\n    }\n  }\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/webhooks/stripe", "host": ["{{baseUrl}}"], "path": ["webhooks", "stripe"] },
+            "description": "Stripe webhook receiver. This endpoint is called by Stripe — not by your frontend.\n\n**Supported events:**\n- `customer.subscription.created`\n- `customer.subscription.updated`\n- `customer.subscription.deleted`\n- `invoice.payment_succeeded`\n- `invoice.payment_failed`\n\n⚠️ The `stripe-signature` header is verified using `STRIPE_WEBHOOK_SECRET`. Testing manually will fail signature verification unless you disable it or use the Stripe CLI (`stripe listen`)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "🏥 Health & Docs",
+      "description": "Health check and API documentation endpoints. No authentication required.",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": { "raw": "http://localhost:3000/health", "raw": "http://localhost:3000/health" },
+            "description": "System health check endpoint.\n\nChecks:\n- **Database:** MongoDB connection state and ping latency\n- **Redis:** Connection status\n- **Memory:** Total, used, free, and process heap\n\nReturns `200` when healthy, `503` when degraded.\n\nDoes **not** require authentication."
+          }
+        },
+        {
+          "name": "Swagger API Docs",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": { "raw": "http://localhost:3000/api-docs", "raw": "http://localhost:3000/api-docs" },
+            "description": "Open the interactive Swagger UI documentation in a browser.\n\nProvides a full OpenAPI 3.0 spec with request/response schemas for all endpoints."
+          }
+        }
+      ]
+    }
+  ]
+}
